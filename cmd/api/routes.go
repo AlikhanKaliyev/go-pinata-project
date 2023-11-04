@@ -20,5 +20,5 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/pinatas/:id", app.updatePinataHandler)
 	router.HandlerFunc(http.MethodDelete, "/v1/pinatas/:id", app.deletePinataHandler)
 
-	return app.recoverPanic(router)
+	return app.recoverPanic(app.rateLimit(router))
 }
