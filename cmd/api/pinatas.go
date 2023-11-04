@@ -4,6 +4,7 @@ import (
 	"PinataService.alikhankaliyev.net/internal/data"
 	"PinataService.alikhankaliyev.net/internal/validator"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -13,7 +14,6 @@ func (app *application) createPinataHandler(w http.ResponseWriter, r *http.Reque
 		Color      string      `json:"color"`
 		Shape      string      `json:"shape"`
 		Contents   []string    `json:"contents"`
-		IsBroken   bool        `json:"broken"`
 		Weight     data.Weight `json:"weight"`
 		Dimensions struct {
 			Height float32 `json:"height,string"`
@@ -32,7 +32,6 @@ func (app *application) createPinataHandler(w http.ResponseWriter, r *http.Reque
 		Color:      input.Color,
 		Shape:      input.Shape,
 		Contents:   input.Contents,
-		IsBroken:   input.IsBroken,
 		Weight:     input.Weight,
 		Dimensions: input.Dimensions,
 	}
@@ -108,7 +107,6 @@ func (app *application) updatePinataHandler(w http.ResponseWriter, r *http.Reque
 		Color      string      `json:"color"`
 		Shape      string      `json:"shape"`
 		Contents   []string    `json:"contents"`
-		IsBroken   bool        `json:"broken"`
 		Weight     data.Weight `json:"weight"`
 		Dimensions struct {
 			Height float32 `json:"height,string"`
@@ -122,15 +120,29 @@ func (app *application) updatePinataHandler(w http.ResponseWriter, r *http.Reque
 		app.badRequestResponse(w, r, err)
 		return
 	}
-
-	pinata = &data.Pinata{
-		ID:         id,
-		Color:      input.Color,
-		Shape:      input.Shape,
-		Contents:   input.Contents,
-		IsBroken:   input.IsBroken,
-		Weight:     input.Weight,
-		Dimensions: input.Dimensions,
+	fmt.Print(pinata)
+	if input.Color != "" {
+		pinata.Color = input.Color
+	}
+	if input.Shape != "" {
+		pinata.Shape = input.Shape
+	}
+	if input.Contents != nil {
+		pinata.Contents = input.Contents
+	}
+	if input.Weight != 0 {
+		pinata.Weight = input.Weight
+	}
+	if &input.Dimensions != nil {
+		if input.Dimensions.Height != 0 {
+			pinata.Dimensions.Height = input.Dimensions.Height
+		}
+		if input.Dimensions.Width != 0 {
+			pinata.Dimensions.Width = input.Dimensions.Width
+		}
+		if input.Dimensions.Depth != 0 {
+			pinata.Dimensions.Depth = input.Dimensions.Depth
+		}
 	}
 
 	v := validator.New()
@@ -141,7 +153,12 @@ func (app *application) updatePinataHandler(w http.ResponseWriter, r *http.Reque
 
 	err = app.models.Pinatas.Update(pinata)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
 

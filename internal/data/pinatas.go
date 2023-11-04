@@ -2,6 +2,7 @@ package data
 
 import (
 	"PinataService.alikhankaliyev.net/internal/validator"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -16,7 +17,6 @@ type Pinata struct {
 	Color      string    `json:"color,omitempty"`
 	Shape      string    `json:"shape,omitempty"`
 	Contents   []string  `json:"contents,omitempty"`
-	IsBroken   bool      `json:"broken"`
 	Weight     Weight    `json:"weight,omitempty,string"`
 	Dimensions struct {
 		Height float32 `json:"height,string"`
@@ -43,12 +43,15 @@ type PinataModel struct {
 
 func (m PinataModel) Insert(pinata *Pinata) error {
 	query := `
-		INSERT INTO pinatas (color, shape, is_broken, contents, weight, height, width, depth)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO pinatas (color, shape, contents, weight, height, width, depth)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, version`
-	args := []interface{}{pinata.Color, pinata.Shape, pinata.IsBroken, pq.Array(pinata.Contents), pinata.Weight, pinata.Dimensions.Height,
+	args := []interface{}{pinata.Color, pinata.Shape, pq.Array(pinata.Contents), pinata.Weight, pinata.Dimensions.Height,
 		pinata.Dimensions.Width, pinata.Dimensions.Depth}
-	return m.DB.QueryRow(query, args...).Scan(&pinata.ID, &pinata.CreatedAt, &pinata.Version)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return m.DB.QueryRowContext(ctx, query, args...).Scan(&pinata.ID, &pinata.CreatedAt, &pinata.Version)
 }
 
 func (m PinataModel) Get(id int64) (*Pinata, error) {
@@ -57,18 +60,21 @@ func (m PinataModel) Get(id int64) (*Pinata, error) {
 	}
 
 	query := `
-		SELECT id, created_at, color, shape, is_broken, contents, weight, height, width, depth, version
+		SELECT id, created_at, color, shape , contents, weight, height, width, depth, version
 		FROM pinatas
 		WHERE id = $1`
 
 	var pinata Pinata
 
-	err := m.DB.QueryRow(query, id).Scan(
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&pinata.ID,
 		&pinata.CreatedAt,
 		&pinata.Color,
 		&pinata.Shape,
-		&pinata.IsBroken,
 		pq.Array(&pinata.Contents),
 		&pinata.Weight,
 		&pinata.Dimensions.Height,
@@ -93,23 +99,36 @@ func (m PinataModel) Update(pinata *Pinata) error {
 	fmt.Print(&pinata)
 	query := `
 		UPDATE pinatas
-		SET color = $1, shape = $2, is_broken = $3, contents = $4, weight = $5, height = $6, width = $7, depth = $8, version = version + 1   
-		WHERE id = $9
+		SET color = $1, shape = $2,  contents = $3, weight = $4, height = $5, width = $6, depth = $7, version = version + 1   
+		WHERE id = $8 AND version = $9
 		RETURNING version`
 
 	args := []interface{}{
 		pinata.Color,
 		pinata.Shape,
-		pinata.IsBroken,
 		pq.Array(pinata.Contents),
 		pinata.Weight,
 		pinata.Dimensions.Height,
 		pinata.Dimensions.Width,
 		pinata.Dimensions.Depth,
 		pinata.ID,
+		pinata.Version,
 	}
 
-	return m.DB.QueryRow(query, args...).Scan(&pinata.Version)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&pinata.Version)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (m PinataModel) Delete(id int64) error {
@@ -120,7 +139,10 @@ func (m PinataModel) Delete(id int64) error {
 	query := `
 		DELETE FROM pinatas WHERE id = $1`
 
-	result, err := m.DB.Exec(query, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result, err := m.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}

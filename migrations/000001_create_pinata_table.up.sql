@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS Pinatas (
     color VARCHAR(255),
     shape VARCHAR(255),
     contents text[] NOT NULL,
-    is_broken BOOLEAN NOT NULL,
     weight DECIMAL(10, 2),
     height DECIMAL(10, 2),
     width DECIMAL(10, 2),
