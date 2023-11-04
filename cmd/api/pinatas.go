@@ -191,3 +191,41 @@ func (app *application) deletePinataHandler(w http.ResponseWriter, r *http.Reque
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+func (app *application) listPinatasHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Color    string
+		Contents []string
+		data.Filters
+	}
+	v := validator.New()
+	qs := r.URL.Query()
+
+	input.Color = app.readString(qs, "color", "")
+	input.Contents = app.readCSV(qs, "contents", []string{})
+
+	input.Filters.Page = app.readInt(qs, "page", 1, v)
+	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
+	// Read the sort query string value into the embedded struct.
+	input.Filters.Sort = app.readString(qs, "sort", "id")
+
+	input.Filters.SortSafelist = []string{"id", "-id", "weight", "-weight"}
+
+	if data.ValidateFilters(v, input.Filters); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	pinatas, metadata, err := app.models.Pinatas.GetAll(input.Color, input.Contents, input.Filters)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"pinatas": pinatas, "metadata": metadata}, nil)
+
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}

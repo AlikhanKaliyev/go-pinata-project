@@ -152,9 +152,63 @@ func (m PinataModel) Delete(id int64) error {
 	if err != nil {
 		return err
 	}
-
 	if rowsAffected == 0 {
 		return ErrRecordNotFound
 	}
 	return nil
+}
+
+func (m PinataModel) GetAll(color string, contents []string, filters Filters) ([]*Pinata, Metadata, error) {
+	query := fmt.Sprintf(`
+		SELECT * 
+		FROM pinatas
+		WHERE (to_tsvector('simple', color) @@ plainto_tsquery('simple', $1) OR $1 = '')
+		AND (contents @> $2 OR $2 = '{}')
+		ORDER BY %s %s, id ASC
+		LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortDirection())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	args := []interface{}{color, pq.Array(contents), filters.limit(), filters.offset()}
+
+	rows, err := m.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	defer rows.Close()
+
+	totalRecords := 0
+	pinatas := []*Pinata{}
+
+	for rows.Next() {
+		var pinata Pinata
+		err := rows.Scan(&pinata.ID,
+			&pinata.CreatedAt,
+			&pinata.Color,
+			&pinata.Shape,
+			pq.Array(&pinata.Contents),
+			&pinata.Weight,
+			&pinata.Dimensions.Height,
+			&pinata.Dimensions.Width,
+			&pinata.Dimensions.Depth,
+			&pinata.Version,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+
+		totalRecords += 1
+
+		pinatas = append(pinatas, &pinata)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+
+	return pinatas, metadata, nil
 }

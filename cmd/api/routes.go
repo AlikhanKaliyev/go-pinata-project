@@ -13,6 +13,8 @@ func (app *application) routes() *httprouter.Router {
 	router.MethodNotAllowed = http.HandlerFunc(app.methodNotAllowedResponse)
 
 	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)
+
+	router.HandlerFunc(http.MethodGet, "/v1/pinatas", app.listPinatasHandler)
 	router.HandlerFunc(http.MethodPost, "/v1/pinatas", app.createPinataHandler)
 	router.HandlerFunc(http.MethodGet, "/v1/pinatas/:id", app.showPinataHandler)
 	router.HandlerFunc(http.MethodPatch, "/v1/pinatas/:id", app.updatePinataHandler)
