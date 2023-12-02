@@ -3,6 +3,7 @@ package main
 import (
 	"PinataService.alikhankaliyev.net/internal/data"
 	"PinataService.alikhankaliyev.net/internal/jsonlog"
+	"PinataService.alikhankaliyev.net/internal/mailer"
 	"context"
 	"database/sql"
 	"flag"
@@ -11,6 +12,7 @@ import (
 	_ "github.com/lib/pq"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -34,6 +36,13 @@ type config struct {
 		burst   int
 		enabled bool
 	}
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 // Define an application struct to hold the dependencies for our HTTP handlers, helpers, // and middleware. At the moment this only contains a copy of the config struct and a
@@ -42,6 +51,8 @@ type application struct {
 	config config
 	logger *jsonlog.Logger
 	models data.Models
+	mailer mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -58,6 +69,12 @@ func main() {
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "4bdc709a30f165", "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "b456b75db7c2ab", "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "PinataService <no-reply@pinataservice.alikhankaliyev.net>", "SMTP sender")
 
 	flag.Parse()
 
@@ -76,6 +93,7 @@ func main() {
 		config: cfg,
 		logger: logger,
 		models: data.NewModels(db),
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
 	err = app.serve()
