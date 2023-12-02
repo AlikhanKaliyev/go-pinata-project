@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  db_container:
+    container_name: db_container
+    image: postgres:latest
+    env_file:
+      - .env
+    environment:
+      DATABASE_HOST: ${DB_HOST}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      SSLMODE: "disable"
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    networks:
+      - pinata_network
+  pinata_container:
+    container_name: pinata_container
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - ${GO_PORT}:${GO_PORT}
+    volumes:
+      - ./cmd/api:/cmd/api
+    depends_on:
+      - db_container
+    networks:
+      - pinata_network
+
+networks:
+  pinata_network:
